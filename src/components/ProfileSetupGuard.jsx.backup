@@ -1,0 +1,104 @@
+import React, { useEffect, useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { base44 } from "@/api/base44Client";
+import BlinkLogo from "./BlinkLogo";
+import { Capacitor } from "@capacitor/core";
+
+const EVENT_FLOW_ROUTES = [
+  createPageUrl("GuidedEventCreation"),
+  createPageUrl("EventDetailsCollection"),
+  createPageUrl("GuidedEnablerSelection"),
+  createPageUrl("ReviewEventBooking"),
+];
+
+const PUBLIC_ROUTES = [
+  createPageUrl("ProfileSetup"),
+  createPageUrl("RoleSelection"),
+  createPageUrl("RoleSelector"),
+  createPageUrl("MobileLogin"),
+  ...EVENT_FLOW_ROUTES
+];
+
+export default function ProfileSetupGuard({ children }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [isChecking, setIsChecking] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const isMobile = Capacitor.isNativePlatform();
+
+  useEffect(() => {
+    checkAuth();
+  }, [location.pathname]);
+
+  const checkAuth = async () => {
+    if (EVENT_FLOW_ROUTES.includes(location.pathname)) {
+      const flowActive = sessionStorage.getItem('event_flow_active');
+      console.log('Event flow route detected:', location.pathname, 'Flow active:', flowActive);
+      setIsAuthorized(true);
+      setIsChecking(false);
+      return;
+    }
+
+    if (PUBLIC_ROUTES.includes(location.pathname)) {
+      setIsAuthorized(true);
+      setIsChecking(false);
+      return;
+    }
+
+    try {
+      const user = await base44.auth.me();
+
+      if (!user.user_type) {
+        navigate(createPageUrl("RoleSelection"), { replace: true });
+        return;
+      }
+
+      if (!user.profile_completed) {
+        navigate(createPageUrl("ProfileSetup"), { replace: true });
+        return;
+      }
+
+      if (user.user_type === 'both') {
+        const lastPortal = localStorage.getItem('last_active_portal');
+        const autoSelect = localStorage.getItem('auto_select_role') === 'true';
+        
+        if (!lastPortal && !autoSelect) {
+          navigate(createPageUrl("RoleSelector"), { replace: true });
+          return;
+        }
+      }
+
+      setIsAuthorized(true);
+    } catch (error) {
+      console.error("Error checking auth:", error);
+      
+      // Redirect to mobile login instead of external browser
+      if (isMobile) {
+        navigate(createPageUrl("MobileLogin"), { replace: true });
+      } else {
+        // Web version can use base44 auth
+        base44.auth.redirectToLogin();
+      }
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  if (isChecking) {
+    return (
+      <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
+        <div className="text-center">
+          <BlinkLogo size="lg" className="animate-pulse mb-4" />
+          <p className="text-sm text-gray-500">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthorized) {
+    return null;
+  }
+
+  return <>{children}</>;
+}

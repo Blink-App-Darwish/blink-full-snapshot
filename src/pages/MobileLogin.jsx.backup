@@ -1,0 +1,170 @@
+import React, { useEffect, useState } from 'react';
+import { Browser } from '@capacitor/browser';
+import { App as CapApp } from '@capacitor/app';
+import { Preferences } from '@capacitor/preferences';
+import BlinkLogo from '../components/BlinkLogo';
+import { Button } from '@/components/ui/button';
+
+export default function MobileLogin() {
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [authStatus, setAuthStatus] = useState('');
+
+  useEffect(() => {
+    console.log('✅✅✅ MobileLogin MOUNTED ✅✅✅');
+
+    // Listen for deep link callbacks
+    const urlListener = CapApp.addListener('appUrlOpen', async (event) => {
+      console.log('🔗 Deep Link Received:', event.url);
+
+      if (event.url.startsWith('blinkapp://auth-callback')) {
+        await handleAuthCallback(event.url);
+      }
+    });
+
+    // Listen for browser close
+    const browserListener = Browser.addListener('browserFinished', async () => {
+      console.log('🚪 Browser closed by user');
+      setIsAuthenticating(false);
+      setAuthStatus('');
+    });
+
+    return () => {
+      urlListener.remove();
+      browserListener.remove();
+    };
+  }, []);
+
+  const handleAuthCallback = async (url) => {
+    console.log('🎯 AUTH CALLBACK DETECTED');
+
+    try {
+      await Browser.close();
+      console.log('🚪 Browser closed');
+
+      const urlObj = new URL(url);
+      const token = urlObj.searchParams.get('token');
+      const userId = urlObj.searchParams.get('user_id');
+      const email = urlObj.searchParams.get('email');
+
+      console.log('📦 Auth Data:', {
+        hasToken: !!token,
+        tokenLength: token?.length,
+        userId,
+        email,
+      });
+
+      if (token && userId) {
+        // Store in native storage
+        await Preferences.set({ key: 'auth_token', value: token });
+        await Preferences.set({ key: 'user_id', value: userId });
+        await Preferences.set({ key: 'user_email', value: email || '' });
+
+        // ALSO store in localStorage for web components
+        localStorage.setItem('auth_token', token);
+        localStorage.setItem('user_id', userId);
+        localStorage.setItem('user_email', email || '');
+
+        console.log('💾 Stored auth data in BOTH storages');
+
+        setAuthStatus('✅ Login successful!');
+        setIsAuthenticating(false);
+
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1000);
+      } else {
+        console.error('❌ Missing auth data in callback');
+        setAuthStatus('❌ Login failed - missing data');
+        setIsAuthenticating(false);
+      }
+    } catch (error) {
+      console.error('❌ Error processing callback:', error);
+      setAuthStatus('❌ Login failed');
+      setIsAuthenticating(false);
+    }
+  };
+
+  const handleLogin = async () => {
+    try {
+      setIsAuthenticating(true);
+      setAuthStatus('🔐 Opening login...');
+      console.log('🔐 Starting OAuth flow...');
+
+      const webAppUrl = 'https://blink-app-690db587.base44.app';
+      const returnUrl = 'blinkapp://auth-callback';
+
+      // Include mobile=true AND return_url
+      const oauthUrl = `${webAppUrl}/login?mobile=true&return_url=${encodeURIComponent(
+        returnUrl
+      )}`;
+
+      console.log('🌐 Opening OAuth URL:', oauthUrl);
+      console.log('📱 Return URL:', returnUrl);
+
+      await Browser.open({
+        url: oauthUrl,
+        presentationStyle: 'popover',
+        toolbarColor: '#10b981',
+      });
+
+      console.log('✅ Browser opened successfully');
+      setAuthStatus('📱 Please sign in on the web page');
+    } catch (error) {
+      console.error('❌ Error opening browser:', error);
+      setAuthStatus('❌ Failed to open login');
+      setIsAuthenticating(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-cyan-50 flex items-center justify-center p-6">
+      <div className="max-w-md w-full bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-white">
+        <div className="text-center mb-8">
+          <BlinkLogo size="lg" className="mx-auto mb-6" />
+          <h1 className="text-3xl font-light text-gray-900 mb-2">
+            Welcome to Blink
+          </h1>
+          <p className="text-gray-600 text-sm">Your event marketplace</p>
+        </div>
+
+        {authStatus && (
+          <div className="mb-6 p-4 bg-blue-50 rounded-lg text-center">
+            <p className="text-sm text-blue-900">{authStatus}</p>
+          </div>
+        )}
+
+        <div className="bg-gradient-to-r from-emerald-50 to-cyan-50 rounded-2xl p-6 border border-emerald-200 mb-6">
+          <h3 className="font-semibold text-emerald-900 mb-3 flex items-center gap-2">
+            <span className="text-xl">🔐</span>
+            Secure Sign In
+          </h3>
+          <p className="text-sm text-emerald-800 mb-4">
+            Sign in through your browser. You'll be automatically returned to
+            the app.
+          </p>
+
+          <Button
+            onClick={handleLogin}
+            disabled={isAuthenticating}
+            className="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white h-14 text-lg font-semibold rounded-xl shadow-lg"
+          >
+            {isAuthenticating ? (
+              <span className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                Waiting...
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                🚀 Sign In with Blink
+              </span>
+            )}
+          </Button>
+        </div>
+
+        <div className="mt-6 text-center">
+          <p className="text-xs text-gray-400">Powered by Base44 • v3.0.0</p>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,19 @@
+import { createRoot } from 'react-dom/client'
+import { SplashScreen } from '@capacitor/splash-screen';
+import App from './App.jsx'
+import './index.css'
+
+console.log('🚀 main.tsx loading');
+
+// Hide splash screen
+SplashScreen.hide().catch(() => {
+  console.log('Splash screen not available (web mode)');
+});
+
+console.log('🚀 Starting React app');
+
+createRoot(document.getElementById('root')!).render(
+  <App />
+)
+
+console.log('🚀 React app started');

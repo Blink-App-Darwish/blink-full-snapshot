@@ -1,0 +1,665 @@
+import React, { useState } from "react";
+import { Card } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { 
+  Download,
+  Code,
+  Database,
+  FileText,
+  BookOpen,
+  Copy,
+  CheckCircle2,
+  ExternalLink,
+  Terminal
+} from "lucide-react";
+import BlinkLogo from "../components/BlinkLogo";
+
+export default function DeveloperDocs() {
+  const [copiedSection, setCopiedSection] = useState(null);
+
+  const copyToClipboard = (text, section) => {
+    navigator.clipboard.writeText(text);
+    setCopiedSection(section);
+    setTimeout(() => setCopiedSection(null), 2000);
+  };
+
+  const exportDataScript = `/**
+ * Complete Data Export Script
+ * Run with: node export-data.js
+ */
+
+const { base44 } = require('@/api/base44Client');
+
+async function exportAllData() {
+  const entities = [
+    'User', 'Enabler', 'Package', 'Event', 'Booking',
+    'Contract', 'Reservation', 'ReservationAuditLog',
+    'CalendarEvent', 'AvailabilityRule', 'Review',
+    'Wishlist', 'BookingOffer', 'Reel', 'Notification',
+    'Idea', 'Task', 'FinancialEntry', 'SystemNotification',
+    'CalendarPreferences', 'AISchedulingInsight',
+    'WorkloadAnalytics', 'NegotiationFramework',
+    'StructuredNegotiation', 'ReservationWaitlist',
+    'ReservationMetrics', 'JobExecutionLog', 'IdempotencyRecord'
+  ];
+
+  const exportData = {};
+  
+  for (const entity of entities) {
+    try {
+      const data = await base44.entities[entity].list('-created_date', 10000);
+      exportData[entity] = data;
+      console.log(\`✓ Exported \${data.length} \${entity} records\`);
+    } catch (error) {
+      console.error(\`✗ Failed to export \${entity}:\`, error.message);
+    }
+  }
+
+  const fs = require('fs');
+  const timestamp = new Date().toISOString().split('T')[0];
+  fs.writeFileSync(
+    \`export-\${timestamp}.json\`,
+    JSON.stringify(exportData, null, 2)
+  );
+  
+  console.log(\`\\n✓ Export complete: export-\${timestamp}.json\`);
+}
+
+exportAllData();`;
+
+  const migrationGuide = `# Blink Platform - Migration Guide
+
+## Prerequisites
+- Node.js 16+
+- Target database (PostgreSQL/MySQL/Firestore)
+- CDN or cloud storage for assets
+
+## Steps
+
+### 1. Export Data
+\`\`\`bash
+node export-data.js
+\`\`\`
+
+### 2. Set Up Database
+
+**PostgreSQL:**
+\`\`\`sql
+CREATE DATABASE blink_production;
+
+CREATE TABLE users (
+  id UUID PRIMARY KEY,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  full_name VARCHAR(255),
+  phone VARCHAR(50),
+  user_type VARCHAR(20),
+  profile_image TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE enablers (
+  id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(id),
+  business_name VARCHAR(255),
+  category VARCHAR(100),
+  portfolio_images JSONB,
+  rating DECIMAL(3,2),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Add remaining tables...
+\`\`\`
+
+### 3. Import Data
+\`\`\`javascript
+const data = require('./export-2025-01-01.json');
+
+for (const [entity, records] of Object.entries(data)) {
+  for (const record of records) {
+    await db.query(
+      \`INSERT INTO \${entity.toLowerCase()}s ...\`,
+      record
+    );
+  }
+}
+\`\`\`
+
+### 4. Update Environment
+Create .env with all required variables (see Environment Variables tab)
+
+### 5. Deploy Backend
+\`\`\`bash
+# Vercel
+vercel --prod
+
+# Heroku
+git push heroku main
+
+# Docker
+docker build -t blink-api .
+docker run -p 3000:3000 blink-api
+\`\`\`
+
+### 6. Configure Webhooks
+Register webhook endpoints in:
+- Stripe Dashboard → Webhooks
+- DocuSign → Connect → Webhooks
+- Google Cloud Console → Push Notifications
+
+### 7. Schedule Background Jobs
+Use Vercel Cron, GitHub Actions, or external scheduler:
+\`\`\`yaml
+# .github/workflows/cron.yml
+on:
+  schedule:
+    - cron: '*/1 * * * *'  # Every minute
+
+jobs:
+  expire-reservations:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger job
+        run: |
+          curl -X POST https://api.yourdomain.com/api/jobs/expire-reservations \\
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}"
+\`\`\``;
+
+  const envExample = `# Blink Platform - Environment Variables
+
+# Database
+DATABASE_URL=postgresql://user:pass@host:5432/blink_production
+
+# CDN
+CDN_BASE_URL=https://cdn.yourdomain.com
+
+# Stripe
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_PUBLISHABLE_KEY=pk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# DocuSign
+DOCUSIGN_CLIENT_ID=your-integration-key
+DOCUSIGN_CLIENT_SECRET=your-secret
+DOCUSIGN_ACCOUNT_ID=your-account-id
+DOCUSIGN_HMAC_KEY=your-webhook-key
+DOCUSIGN_BASE_PATH=https://www.docusign.net/restapi
+
+# Google Calendar
+GOOGLE_CALENDAR_CLIENT_ID=your-id.apps.googleusercontent.com
+GOOGLE_CALENDAR_CLIENT_SECRET=your-secret
+GOOGLE_CALENDAR_REDIRECT_URI=https://yourdomain.com/api/calendar/oauth/callback
+
+# SendGrid
+SENDGRID_API_KEY=SG.your-key
+SENDGRID_FROM_EMAIL=noreply@yourdomain.com
+SENDGRID_TEMPLATE_BOOKING_CONFIRMATION=d-xxxxx
+SENDGRID_TEMPLATE_CONTRACT_READY=d-xxxxx
+SENDGRID_TEMPLATE_EVENT_REMINDER=d-xxxxx
+
+# Twilio (Optional)
+TWILIO_ACCOUNT_SID=ACxxxxx
+TWILIO_AUTH_TOKEN=your-token
+TWILIO_PHONE_NUMBER=+1234567890
+
+# Sentry
+SENTRY_DSN=https://xxxxx@sentry.io/xxxxx
+SENTRY_DSN_PUBLIC=https://xxxxx@sentry.io/xxxxx
+
+# Background Jobs
+RESERVATION_EXPIRY_MINUTES=20
+CALENDAR_SYNC_INTERVAL_MINUTES=5
+JOB_CONCURRENCY_LIMIT=5
+
+# Security
+JWT_SECRET=your-32-char-secret
+CRON_SECRET=your-cron-secret
+SESSION_SECRET=your-session-secret`;
+
+  const apiSpec = `# Blink Platform API Specification
+
+## Authentication
+All endpoints (except webhooks) require Bearer token:
+\`\`\`
+Authorization: Bearer <jwt_token>
+\`\`\`
+
+## Background Jobs
+
+### POST /api/jobs/expire-reservations
+Expires old reservation holds
+\`\`\`bash
+curl -X POST https://api.yourdomain.com/api/jobs/expire-reservations \\
+  -H "X-Cron-Secret: your-secret"
+\`\`\`
+
+### POST /api/jobs/sync-calendars
+Syncs Google Calendar events
+\`\`\`bash
+curl -X POST https://api.yourdomain.com/api/jobs/sync-calendars \\
+  -H "X-Cron-Secret: your-secret"
+\`\`\`
+
+## Webhooks
+
+### POST /api/webhooks/stripe
+Stripe payment events
+\`\`\`json
+{
+  "type": "payment_intent.succeeded",
+  "data": {
+    "object": {
+      "id": "pi_xxxxx",
+      "amount": 5000,
+      "metadata": {
+        "reservation_id": "..."
+      }
+    }
+  }
+}
+\`\`\`
+
+### POST /api/webhooks/docusign
+DocuSign contract events
+\`\`\`json
+{
+  "event": "envelope-completed",
+  "data": {
+    "envelopeId": "...",
+    "status": "completed"
+  }
+}
+\`\`\`
+
+## Payments
+
+### POST /api/payment/create-intent
+Creates Stripe Payment Intent
+\`\`\`json
+{
+  "amount": 5000,
+  "reservation_id": "...",
+  "idempotency_key": "..."
+}
+\`\`\`
+
+Response:
+\`\`\`json
+{
+  "client_secret": "pi_..._secret_...",
+  "payment_intent_id": "pi_xxxxx"
+}
+\`\`\`
+
+## Contracts
+
+### POST /api/contracts/{id}/initiate-signing
+Initiates DocuSign signing
+\`\`\`json
+{
+  "contract_id": "...",
+  "signer_email": "user@example.com",
+  "signer_name": "John Doe",
+  "return_url": "https://yourdomain.com/contracts"
+}
+\`\`\`
+
+Response:
+\`\`\`json
+{
+  "signing_url": "https://docusign.com/...",
+  "envelope_id": "..."
+}
+\`\`\`
+
+## Calendar
+
+### GET /api/calendar/oauth/url
+Get OAuth authorization URL
+\`\`\`bash
+curl "https://api.yourdomain.com/api/calendar/oauth/url?enabler_id=..." \\
+  -H "Authorization: Bearer <token>"
+\`\`\`
+
+### POST /api/calendar/google/sync
+Sync calendar events
+\`\`\`json
+{
+  "enabler_id": "..."
+}
+\`\`\`
+
+## Emails
+
+### POST /api/emails/send
+Send email notification
+\`\`\`json
+{
+  "to": "user@example.com",
+  "subject": "Your booking is confirmed",
+  "template_name": "booking_confirmation",
+  "template_data": {
+    "event_name": "Birthday Party",
+    "event_date": "2025-02-01"
+  }
+}
+\`\`\`
+
+## SMS
+
+### POST /api/sms/send-otp
+Send OTP via SMS
+\`\`\`json
+{
+  "to": "+1234567890",
+  "code": "123456"
+}
+\`\`\``;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <BlinkLogo size="lg" />
+            <h1 className="text-4xl font-bold">Developer Documentation</h1>
+          </div>
+          <p className="text-gray-600 text-lg">
+            Complete guide for data export, migration, and API integration
+          </p>
+        </div>
+
+        <Tabs defaultValue="export" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="export">Data Export</TabsTrigger>
+            <TabsTrigger value="migration">Migration</TabsTrigger>
+            <TabsTrigger value="env">Environment</TabsTrigger>
+            <TabsTrigger value="api">API Spec</TabsTrigger>
+            <TabsTrigger value="deploy">Deployment</TabsTrigger>
+          </TabsList>
+
+          {/* Data Export Tab */}
+          <TabsContent value="export" className="space-y-6">
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  <Database className="w-6 h-6" />
+                  Complete Data Export
+                </h2>
+                <Button
+                  onClick={() => copyToClipboard(exportDataScript, 'export')}
+                  variant="outline"
+                  size="sm"
+                >
+                  {copiedSection === 'export' ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copy Script
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              <Alert className="mb-4 bg-blue-50 border-blue-200">
+                <AlertDescription className="text-blue-800">
+                  <strong>Export all data</strong> from Base44 platform to portable JSON format.
+                  Run this script to backup all entities before migration.
+                </AlertDescription>
+              </Alert>
+
+              <div className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm overflow-x-auto">
+                <pre>{exportDataScript}</pre>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                <h3 className="font-bold">What gets exported:</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                  {[
+                    'Users', 'Enablers', 'Packages', 'Events', 'Bookings',
+                    'Contracts', 'Reservations', 'Calendar Events', 'Reviews',
+                    'Financial Records', 'Negotiations', 'Tasks', 'Ideas',
+                    'Notifications', 'Analytics', 'Audit Logs'
+                  ].map(item => (
+                    <div key={item} className="flex items-center gap-2 bg-gray-50 p-2 rounded">
+                      <CheckCircle2 className="w-4 h-4 text-green-600" />
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Migration Tab */}
+          <TabsContent value="migration" className="space-y-6">
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  <FileText className="w-6 h-6" />
+                  Migration Guide
+                </h2>
+                <Button
+                  onClick={() => copyToClipboard(migrationGuide, 'migration')}
+                  variant="outline"
+                  size="sm"
+                >
+                  {copiedSection === 'migration' ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copy Guide
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              <div className="prose max-w-none">
+                <pre className="bg-gray-50 p-4 rounded-lg text-sm overflow-x-auto whitespace-pre-wrap">
+                  {migrationGuide}
+                </pre>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Environment Variables Tab */}
+          <TabsContent value="env" className="space-y-6">
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  <Terminal className="w-6 h-6" />
+                  Environment Variables
+                </h2>
+                <Button
+                  onClick={() => copyToClipboard(envExample, 'env')}
+                  variant="outline"
+                  size="sm"
+                >
+                  {copiedSection === 'env' ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copy Template
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              <Alert className="mb-4 bg-yellow-50 border-yellow-200">
+                <AlertDescription className="text-yellow-800">
+                  <strong>Security:</strong> Never commit .env files to git. 
+                  Store secrets in environment variables on your hosting platform.
+                </AlertDescription>
+              </Alert>
+
+              <div className="bg-gray-900 text-white p-4 rounded-lg font-mono text-sm overflow-x-auto">
+                <pre>{envExample}</pre>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* API Spec Tab */}
+          <TabsContent value="api" className="space-y-6">
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  <Code className="w-6 h-6" />
+                  API Specification
+                </h2>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => copyToClipboard(apiSpec, 'api')}
+                    variant="outline"
+                    size="sm"
+                  >
+                    {copiedSection === 'api' ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copy Spec
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open('https://www.postman.com', '_blank')}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Postman
+                  </Button>
+                </div>
+              </div>
+
+              <div className="prose max-w-none">
+                <pre className="bg-gray-50 p-4 rounded-lg text-sm overflow-x-auto whitespace-pre-wrap">
+                  {apiSpec}
+                </pre>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Deployment Tab */}
+          <TabsContent value="deploy" className="space-y-6">
+            <Card className="p-6">
+              <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                <BookOpen className="w-6 h-6" />
+                Deployment Options
+              </h2>
+
+              <div className="space-y-6">
+                {/* Vercel */}
+                <div className="border rounded-lg p-4">
+                  <h3 className="font-bold text-lg mb-2">Vercel (Recommended)</h3>
+                  <p className="text-gray-600 mb-3">
+                    Best for serverless deployments with automatic scaling
+                  </p>
+                  <div className="bg-gray-900 text-white p-3 rounded font-mono text-sm">
+                    <div>vercel --prod</div>
+                    <div className="text-gray-400 mt-2"># Configure env in Vercel dashboard</div>
+                  </div>
+                </div>
+
+                {/* Heroku */}
+                <div className="border rounded-lg p-4">
+                  <h3 className="font-bold text-lg mb-2">Heroku</h3>
+                  <p className="text-gray-600 mb-3">
+                    Traditional hosting with easy PostgreSQL setup
+                  </p>
+                  <div className="bg-gray-900 text-white p-3 rounded font-mono text-sm">
+                    <div>heroku create blink-api</div>
+                    <div>heroku addons:create heroku-postgresql</div>
+                    <div>git push heroku main</div>
+                  </div>
+                </div>
+
+                {/* Docker */}
+                <div className="border rounded-lg p-4">
+                  <h3 className="font-bold text-lg mb-2">Docker</h3>
+                  <p className="text-gray-600 mb-3">
+                    Containerized deployment for any platform
+                  </p>
+                  <div className="bg-gray-900 text-white p-3 rounded font-mono text-sm">
+                    <div>docker build -t blink-api .</div>
+                    <div>docker run -p 3000:3000 --env-file .env blink-api</div>
+                  </div>
+                </div>
+
+                {/* AWS Lambda */}
+                <div className="border rounded-lg p-4">
+                  <h3 className="font-bold text-lg mb-2">AWS Lambda</h3>
+                  <p className="text-gray-600 mb-3">
+                    Serverless with Serverless Framework
+                  </p>
+                  <div className="bg-gray-900 text-white p-3 rounded font-mono text-sm">
+                    <div>npm install -g serverless</div>
+                    <div>serverless deploy --stage production</div>
+                  </div>
+                </div>
+              </div>
+
+              <Alert className="mt-6 bg-blue-50 border-blue-200">
+                <AlertDescription className="text-blue-800">
+                  <strong>Post-deployment:</strong> Configure webhook URLs in Stripe, DocuSign, 
+                  and Google Cloud Console to point to your new domain.
+                </AlertDescription>
+              </Alert>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        {/* Quick Links */}
+        <Card className="p-6 mt-8">
+          <h3 className="font-bold text-lg mb-4">Quick Reference</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <a
+              href="https://stripe.com/docs/api"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 p-3 border rounded-lg hover:bg-gray-50 transition"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>Stripe API Docs</span>
+            </a>
+            <a
+              href="https://developers.docusign.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 p-3 border rounded-lg hover:bg-gray-50 transition"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>DocuSign Docs</span>
+            </a>
+            <a
+              href="https://developers.google.com/calendar"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 p-3 border rounded-lg hover:bg-gray-50 transition"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>Google Calendar API</span>
+            </a>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}

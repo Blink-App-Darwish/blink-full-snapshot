@@ -1,0 +1,882 @@
+import React, { useState, useEffect } from 'react';
+import { useLocation, Link } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import {
+  Home,
+  Calendar,
+  User,
+  LayoutDashboard,
+  Store,
+  Search,
+  Bell,
+  Heart,
+  MoreHorizontal,
+  Brain,
+  DollarSign,
+} from 'lucide-react';
+import { User as UserEntity } from '@/api/entities';
+import BlinkLogo from '../components/BlinkLogo';
+import FloatingAIEventsButton from '../components/FloatingAIEventsButton';
+import FloatingReelsButton from '../components/FloatingReelsButton';
+import ProfileSetupGuard from '../components/ProfileSetupGuard';
+import ErrorBoundary from '../components/ErrorBoundary';
+import EnablerFloatingMenu from '../components/EnablerFloatingMenu';
+import EnablerSearchOverlay from '../components/EnablerSearchOverlay';
+import NotificationOverlay from '../components/NotificationOverlay';
+import { Enabler, Notification } from '@/api/entities';
+import { base44 } from '@/api/base44Client';
+import BabyBlinkFloating from '../components/BabyBlinkFloating';
+
+const ENABLER_PORTAL_ROUTES = [
+  'EnablerDashboard',
+  'EnablerShop',
+  'EnablerBookings',
+  'EnablerCalendar',
+  'EnablerFinance',
+  'EnablerReviews',
+  'EnablerAnalytics',
+  'EnablerContracts',
+  'CreateContract',
+  'ContractDetail',
+  'NegotiationSetup',
+  'SmartPackageCreator',
+  'EditEnablerProfile',
+  'CalendarSetupWizard',
+  'ReservationAdmin',
+  'NegotiationDashboard',
+  'CalendarDiagnostics',
+  'AddExpense',
+  'CreateEnablerProfile',
+  'PortfolioCreator',
+  'ReelsViewer',
+];
+
+const HOST_PORTAL_ROUTES = [
+  'Home',
+  'MyEvents',
+  'Blink',
+  'Browse',
+  'CreateEvent',
+  'EventDetail',
+  'Wishlist',
+  'WishlistView',
+  'EventWishlist',
+  'Calendar',
+  'HostCalendar',
+  'EventBooking',
+  'GuidedEventCreation',
+  'EventDetailsCollection',
+  'GuidedEnablerSelection',
+  'ReviewEventBooking',
+  'BlinkReadyEvents',
+  'ReelView',
+  'EnablerProfile',
+  'HostBrain',
+  'BrainOrientation',
+  'IdeaBoard',
+  'TaskManager',
+  'FinanceTracker',
+  'EditEventDetails',
+  'BookingFlow',
+  'StructuredNegotiate',
+  'SelectNegotiationFramework',
+  'ReviewSubmit',
+];
+
+const SHARED_ROUTES = [
+  'Settings',
+  'Messages',
+  'RoleSelection',
+  'ProfileSetup',
+  'Profile',
+  'AccountProfile',
+  'PaymentsFinancials',
+  'SupportHelp',
+  'AdminDashboard',
+];
+
+export default function Layout({ children }) {
+  const location = useLocation();
+  const [currentPortal, setCurrentPortal] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [enabler, setEnabler] = useState(null);
+  const [pageTitle, setPageTitle] = useState('');
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [hasAccessedBrain, setHasAccessedBrain] = useState(false);
+  const [isLoadingLayout, setIsLoadingLayout] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
+  const isAdminRoute = location.pathname === createPageUrl('AdminDashboard');
+
+  const determinePortalFromRoute = () => {
+    const currentPath = location.pathname;
+
+    console.log('🔍 DETERMINING PORTAL FOR PATH:', currentPath);
+
+    const isEnablerRoute = ENABLER_PORTAL_ROUTES.some((route) => {
+      const routePath = createPageUrl(route);
+      const matches = currentPath === routePath;
+      if (matches) {
+        console.log('✅ MATCHED ENABLER ROUTE:', route, routePath);
+      }
+      return matches;
+    });
+
+    if (isEnablerRoute) {
+      console.log('🔷 ENABLER PORTAL ROUTE DETECTED:', currentPath);
+      return 'enabler';
+    }
+
+    const isHostRoute = HOST_PORTAL_ROUTES.some((route) => {
+      const routePath = createPageUrl(route);
+      const matches = currentPath === routePath;
+      if (matches) {
+        console.log('✅ MATCHED HOST ROUTE:', route, routePath);
+      }
+      return matches;
+    });
+
+    if (isHostRoute) {
+      console.log('🔶 HOST PORTAL ROUTE DETECTED:', currentPath);
+      return 'host';
+    }
+
+    const isSharedRoute = SHARED_ROUTES.some((route) => {
+      const routePath = createPageUrl(route);
+      return currentPath === routePath;
+    });
+
+    if (isSharedRoute) {
+      console.log('⚪ SHARED ROUTE DETECTED:', currentPath);
+      return 'shared';
+    }
+
+    console.log('⚠️ UNKNOWN ROUTE:', currentPath);
+    return null;
+  };
+
+  const determineActivePortal = (user, routePortal) => {
+    const lastPortal = localStorage.getItem('last_active_portal');
+
+    console.log('🎯 DETERMINE ACTIVE PORTAL:', {
+      userType: user.user_type,
+      routePortal,
+      currentPath: location.pathname,
+      lastPortal,
+    });
+
+    // CRITICAL: If on enabler route, FORCE enabler portal
+    if (routePortal === 'enabler') {
+      if (user.user_type === 'enabler' || user.user_type === 'both') {
+        console.log('✅ ENABLER ROUTE - FORCING ENABLER PORTAL');
+        return 'enabler';
+      }
+      console.warn('⚠️ User has no enabler access but on enabler route');
+      return 'host';
+    }
+
+    // CRITICAL: If on host route, FORCE host portal
+    if (routePortal === 'host') {
+      if (user.user_type === 'host' || user.user_type === 'both') {
+        console.log('✅ HOST ROUTE - FORCING HOST PORTAL');
+        return 'host';
+      }
+      console.warn('⚠️ User has no host access but on host route');
+      return 'enabler';
+    }
+
+    // Event flow check
+    const flowActive = sessionStorage.getItem('event_flow_active');
+    if (flowActive === 'true') {
+      console.log('✅ EVENT FLOW - HOST PORTAL');
+      return 'host';
+    }
+
+    // For shared routes
+    if (routePortal === 'shared') {
+      console.log('⚪ SHARED ROUTE - Last portal:', lastPortal);
+
+      if (user.user_type === 'enabler') {
+        return 'enabler';
+      }
+
+      if (user.user_type === 'host') {
+        return 'host';
+      }
+
+      if (user.user_type === 'both') {
+        if (lastPortal === 'enabler') {
+          return 'enabler';
+        }
+        return 'host';
+      }
+    }
+
+    return user.user_type === 'enabler' ? 'enabler' : 'host';
+  };
+
+  const loadUserAndDeterminePortal = async () => {
+    setIsLoadingLayout(true);
+
+    try {
+      const user = await base44.auth.me();
+      setCurrentUser(user);
+
+      if (isAdminRoute) {
+        setCurrentPortal('admin');
+        setIsLoadingLayout(false);
+        return;
+      }
+
+      const routePortal = determinePortalFromRoute();
+      const activePortal = determineActivePortal(user, routePortal);
+
+      console.log('================================');
+      console.log('FINAL PORTAL DECISION:');
+      console.log('User Type:', user.user_type);
+      console.log('Route Portal:', routePortal);
+      console.log('Active Portal:', activePortal);
+      console.log('Path:', location.pathname);
+      console.log('================================');
+
+      setCurrentPortal(activePortal);
+
+      if (routePortal === 'shared' || routePortal === null) {
+        localStorage.setItem('last_active_portal', activePortal);
+      }
+
+      if (
+        activePortal === 'enabler' &&
+        (user.user_type === 'enabler' || user.user_type === 'both')
+      ) {
+        await loadEnablerProfiles(user);
+      }
+    } catch (error) {
+      console.error('Error loading user:', error);
+      setCurrentPortal('host');
+    } finally {
+      setIsLoadingLayout(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUserAndDeterminePortal();
+    updatePageTitle();
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (currentUser && currentPortal === 'enabler' && notificationsEnabled) {
+      loadNotifications();
+    }
+  }, [currentUser, currentPortal, notificationsEnabled]);
+
+  useEffect(() => {
+    const accessedBrain = localStorage.getItem('has_accessed_brain') === 'true';
+    setHasAccessedBrain(accessedBrain);
+  }, []);
+
+  const loadEnablerProfiles = async (userData) => {
+    try {
+      const profiles = await Enabler.filter(
+        { user_id: userData.id },
+        '-created_date'
+      );
+
+      const selectedProfileId = localStorage.getItem(
+        'selected_enabler_profile'
+      );
+      let enablerData = null;
+
+      if (selectedProfileId) {
+        enablerData = profiles.find((p) => p.id === selectedProfileId);
+      }
+
+      if (!enablerData && profiles.length > 0) {
+        enablerData = profiles.find((p) => p.is_primary) || profiles[0];
+        localStorage.setItem('selected_enabler_profile', enablerData.id);
+      }
+
+      setEnabler(enablerData);
+    } catch (error) {
+      console.error('Error loading enabler profiles:', error);
+    }
+  };
+
+  const loadNotifications = async () => {
+    try {
+      const notificationsData = await Notification.filter(
+        { user_id: currentUser.id },
+        '-created_date',
+        50
+      );
+      setNotifications(notificationsData);
+      setUnreadCount(notificationsData.filter((n) => !n.read).length);
+    } catch (error) {
+      console.error('Error loading notifications (non-critical):', error);
+      setNotificationsEnabled(false);
+      setNotifications([]);
+      setUnreadCount(0);
+    }
+  };
+
+  const markAsRead = async (notificationId) => {
+    if (!notificationsEnabled) return;
+
+    try {
+      await Notification.update(notificationId, { read: true });
+      if (currentUser) {
+        await loadNotifications();
+      }
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    if (!notificationsEnabled) return;
+
+    try {
+      const unreadNotifications = notifications.filter((n) => !n.read);
+      await Promise.all(
+        unreadNotifications.map((notif) =>
+          Notification.update(notif.id, { read: true })
+        )
+      );
+      if (currentUser) {
+        await loadNotifications();
+      }
+    } catch (error) {
+      console.error('Error marking all as read:', error);
+    }
+  };
+
+  const updatePageTitle = () => {
+    const titles = {
+      [createPageUrl('EnablerDashboard')]: 'Blink Hub',
+      [createPageUrl('EnablerShop')]: 'My Shop',
+      [createPageUrl('EnablerBookings')]: 'Bookings',
+      [createPageUrl('EnablerCalendar')]: 'Calendar',
+      [createPageUrl('EnablerFinance')]: 'Finance',
+      [createPageUrl('Home')]: 'Home',
+      [createPageUrl('MyEvents')]: 'My Events',
+      [createPageUrl('Blink')]: 'Blink',
+      [createPageUrl('HostBrain')]: 'Planner',
+      [createPageUrl('BrainOrientation')]: 'Brain Setup',
+      [createPageUrl('Profile')]: 'Profile',
+      [createPageUrl('AdminDashboard')]: 'Admin Dashboard',
+    };
+
+    setPageTitle(titles[location.pathname] || 'Blink');
+  };
+
+  const isActive = (path) => location.pathname === createPageUrl(path);
+
+  if (isLoadingLayout || (currentPortal === null && !isAdminRoute)) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <BlinkLogo size="md" className="animate-breath" />
+      </div>
+    );
+  }
+
+  if (isAdminRoute) {
+    return <ErrorBoundary showDetails={false}>{children}</ErrorBoundary>;
+  }
+
+  console.log(
+    '🎨 RENDERING PORTAL:',
+    currentPortal,
+    'for route:',
+    location.pathname,
+    'user type:',
+    currentUser?.user_type
+  );
+
+  return (
+    <ErrorBoundary showDetails={false}>
+      <ProfileSetupGuard>
+        <style>{`
+          :root {
+            --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+            --nav-height: 56px;
+          }
+
+          .safe-bottom {
+            padding-bottom: calc(var(--nav-height) + var(--safe-area-inset-bottom) + 1rem);
+          }
+
+          .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: calc(var(--nav-height) + var(--safe-area-inset-bottom));
+            padding-bottom: var(--safe-area-inset-bottom);
+            z-index: 50;
+          }
+
+          @keyframes breath {
+            0% {
+              transform: scale(0.98);
+              opacity: 0.8;
+            }
+            50% {
+              transform: scale(1.02);
+              opacity: 1;
+            }
+            100% {
+              transform: scale(0.98);
+              opacity: 0.8;
+            }
+          }
+
+          .animate-breath {
+            animation: breath 2.5s ease-in-out infinite;
+          }
+        `}</style>
+
+        {currentPortal === 'enabler' ? (
+          <div
+            className="min-h-screen bg-white"
+            data-portal="enabler"
+            data-user-type={currentUser?.user_type}
+            data-route={location.pathname}
+          >
+            {/* Enabler Header */}
+            <div className="fixed top-0 left-0 right-0 z-50 bg-white/70 backdrop-blur-xl border-b border-gray-100 shadow-sm">
+              <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
+                <h1 className="text-sm font-medium text-gray-900 tracking-tight">
+                  {pageTitle}
+                </h1>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setIsSearchOpen(true)}
+                    className="w-8 h-8 rounded-full flex items-center justify-center active:scale-90 transition-all duration-200 border border-emerald-500/30 hover:border-emerald-500/60 hover:bg-emerald-50/30"
+                  >
+                    <Search
+                      className="w-4 h-4 text-emerald-600"
+                      strokeWidth={1.5}
+                    />
+                  </button>
+
+                  {notificationsEnabled && (
+                    <button
+                      onClick={() => setIsNotificationsOpen(true)}
+                      className="relative w-8 h-8 rounded-full flex items-center justify-center active:scale-90 transition-all duration-200 border border-emerald-500/30 hover:border-emerald-500/60 hover:bg-emerald-50/30"
+                    >
+                      <Bell
+                        className="w-4 h-4 text-emerald-600"
+                        strokeWidth={1.5}
+                      />
+                      {unreadCount > 0 && (
+                        <div className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full flex items-center justify-center shadow-sm">
+                          <span className="text-[9px] font-bold text-white">
+                            {unreadCount}
+                          </span>
+                        </div>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Enabler Main Content */}
+            <main className="pt-14 safe-bottom">{children}</main>
+
+            <BabyBlinkFloating />
+            <FloatingReelsButton className="z-[99]" />
+
+            {/* Enabler Overlays */}
+            <EnablerSearchOverlay
+              isOpen={isSearchOpen}
+              onClose={() => setIsSearchOpen(false)}
+              enablerId={enabler?.id}
+            />
+
+            {notificationsEnabled && (
+              <NotificationOverlay
+                isOpen={isNotificationsOpen}
+                onClose={() => setIsNotificationsOpen(false)}
+                notifications={notifications}
+                onMarkAsRead={markAsRead}
+                onMarkAllAsRead={markAllAsRead}
+              />
+            )}
+
+            <EnablerFloatingMenu
+              isOpen={isMenuOpen}
+              onClose={() => setIsMenuOpen(false)}
+            />
+
+            {/* ENABLER BOTTOM NAVIGATION */}
+            <nav
+              className="bottom-nav border-t border-white/10 shadow-2xl overflow-hidden"
+              data-portal-nav="enabler"
+              style={{
+                background:
+                  'linear-gradient(180deg, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0.85) 100%)',
+                backdropFilter: 'blur(60px) saturate(200%)',
+                WebkitBackdropFilter: 'blur(60px) saturate(200%)',
+              }}
+            >
+              <div
+                className="absolute inset-0 opacity-30"
+                style={{
+                  background:
+                    'radial-gradient(circle at 20% 50%, rgba(16, 185, 129, 0.15) 0%, transparent 50%), radial-gradient(circle at 80% 50%, rgba(6, 182, 212, 0.15) 0%, transparent 50%)',
+                  animation: 'liquidFlow 8s ease-in-out infinite',
+                }}
+              />
+
+              <div className="max-w-md mx-auto h-14 flex items-center justify-around px-3 relative">
+                {/* Shop */}
+                <Link
+                  to={createPageUrl('EnablerShop')}
+                  className="relative flex flex-col items-center justify-center gap-1 px-2 py-1.5 rounded-2xl transition-all duration-300 hover:scale-105 active:scale-95 min-w-[52px]"
+                >
+                  <div
+                    className={`relative transition-all duration-300 ${
+                      isActive('EnablerShop') ? 'scale-110' : ''
+                    }`}
+                  >
+                    <Store
+                      className={`w-5 h-5 transition-all duration-300 ${
+                        isActive('EnablerShop')
+                          ? 'text-emerald-600 drop-shadow-lg'
+                          : 'text-gray-400'
+                      }`}
+                      strokeWidth={1.8}
+                    />
+                    {isActive('EnablerShop') && (
+                      <div className="absolute inset-0 bg-emerald-400 blur-xl opacity-20 animate-pulse" />
+                    )}
+                  </div>
+                  <span
+                    className={`text-[8px] font-semibold tracking-wider transition-all duration-300 ${
+                      isActive('EnablerShop')
+                        ? 'text-emerald-600'
+                        : 'text-gray-400'
+                    }`}
+                  >
+                    SHOP
+                  </span>
+                  {isActive('EnablerShop') && (
+                    <div
+                      className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400"
+                      style={{
+                        boxShadow: '0 0 10px rgba(52, 211, 153, 0.5)',
+                      }}
+                    />
+                  )}
+                </Link>
+
+                {/* Calendar */}
+                <Link
+                  to={createPageUrl('EnablerCalendar')}
+                  className="relative flex flex-col items-center justify-center gap-1 px-2 py-1.5 rounded-2xl transition-all duration-300 hover:scale-105 active:scale-95 min-w-[52px]"
+                >
+                  <div
+                    className={`relative transition-all duration-300 ${
+                      isActive('EnablerCalendar') ? 'scale-110' : ''
+                    }`}
+                  >
+                    <Calendar
+                      className={`w-5 h-5 transition-all duration-300 ${
+                        isActive('EnablerCalendar')
+                          ? 'text-emerald-600 drop-shadow-lg'
+                          : 'text-gray-400'
+                      }`}
+                      strokeWidth={1.8}
+                    />
+                    {isActive('EnablerCalendar') && (
+                      <div className="absolute inset-0 bg-emerald-400 blur-xl opacity-20 animate-pulse" />
+                    )}
+                  </div>
+                  <span
+                    className={`text-[8px] font-semibold tracking-wider transition-all duration-300 ${
+                      isActive('EnablerCalendar')
+                        ? 'text-emerald-600'
+                        : 'text-gray-400'
+                    }`}
+                  >
+                    CALENDAR
+                  </span>
+                  {isActive('EnablerCalendar') && (
+                    <div
+                      className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400"
+                      style={{
+                        boxShadow: '0 0 10px rgba(52, 211, 153, 0.5)',
+                      }}
+                    />
+                  )}
+                </Link>
+
+                {/* Dashboard */}
+                <Link
+                  to={createPageUrl('EnablerDashboard')}
+                  className="relative flex flex-col items-center justify-center gap-1 px-2 py-1.5 rounded-2xl transition-all duration-300 hover:scale-105 active:scale-95 min-w-[52px]"
+                >
+                  <div className="relative w-full h-full flex items-center justify-center">
+                    <LayoutDashboard
+                      className={`w-5 h-5 transition-all duration-300 ${
+                        isActive('EnablerDashboard')
+                          ? 'scale-110'
+                          : 'text-gray-400'
+                      }`}
+                      style={{
+                        color: isActive('EnablerDashboard')
+                          ? '#10b981'
+                          : undefined,
+                        filter: isActive('EnablerDashboard')
+                          ? 'drop-shadow(0 0 8px rgba(134, 239, 172, 0.6)) drop-shadow(0 0 12px rgba(147, 197, 253, 0.4))'
+                          : 'none',
+                      }}
+                      strokeWidth={1.8}
+                    />
+                  </div>
+                  <span
+                    className={`text-[8px] font-semibold tracking-wider transition-all duration-300 ${
+                      !isActive('EnablerDashboard') && 'text-gray-400'
+                    }`}
+                    style={{
+                      color: isActive('EnablerDashboard')
+                        ? '#10b981'
+                        : undefined,
+                    }}
+                  >
+                    HUB
+                  </span>
+                  {isActive('EnablerDashboard') && (
+                    <div
+                      className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full"
+                      style={{
+                        background:
+                          'linear-gradient(to right, rgba(134, 239, 172, 0.7), rgba(147, 197, 253, 0.7))',
+                        boxShadow:
+                          '0 0 8px rgba(134, 239, 172, 0.4), 0 0 12px rgba(147, 197, 253, 0.3)',
+                      }}
+                    />
+                  )}
+                </Link>
+
+                {/* Finance */}
+                <Link
+                  to={createPageUrl('EnablerFinance')}
+                  className="relative flex flex-col items-center justify-center gap-1 px-2 py-1.5 rounded-2xl transition-all duration-300 hover:scale-105 active:scale-95 min-w-[52px]"
+                >
+                  <div
+                    className={`relative transition-all duration-300 ${
+                      isActive('EnablerFinance') ? 'scale-110' : ''
+                    }`}
+                  >
+                    <DollarSign
+                      className={`w-5 h-5 transition-all duration-300 ${
+                        isActive('EnablerFinance')
+                          ? 'text-emerald-600 drop-shadow-lg'
+                          : 'text-gray-400'
+                      }`}
+                      strokeWidth={1.8}
+                    />
+                    {isActive('EnablerFinance') && (
+                      <div className="absolute inset-0 bg-emerald-400 blur-xl opacity-20 animate-pulse" />
+                    )}
+                  </div>
+                  <span
+                    className={`text-[8px] font-semibold tracking-wider transition-all duration-300 ${
+                      isActive('EnablerFinance')
+                        ? 'text-emerald-600'
+                        : 'text-gray-400'
+                    }`}
+                  >
+                    FINANCE
+                  </span>
+                  {isActive('EnablerFinance') && (
+                    <div
+                      className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400"
+                      style={{
+                        boxShadow: '0 0 10px rgba(52, 211, 153, 0.5)',
+                      }}
+                    />
+                  )}
+                </Link>
+
+                {/* Profile */}
+                <Link
+                  to={createPageUrl('Profile')}
+                  className="relative flex flex-col items-center justify-center gap-1 px-2 py-1.5 rounded-2xl transition-all duration-300 hover:scale-105 active:scale-95 min-w-[52px]"
+                >
+                  <div
+                    className={`relative transition-all duration-300 ${
+                      isActive('Profile') ? 'scale-110' : ''
+                    }`}
+                  >
+                    <User
+                      className={`w-5 h-5 transition-all duration-300 ${
+                        isActive('Profile')
+                          ? 'text-emerald-600 drop-shadow-lg'
+                          : 'text-gray-400'
+                      }`}
+                      strokeWidth={1.8}
+                    />
+                    {isActive('Profile') && (
+                      <div className="absolute inset-0 bg-emerald-400 blur-xl opacity-20 animate-pulse" />
+                    )}
+                  </div>
+                  <span
+                    className={`text-[8px] font-semibold tracking-wider transition-all duration-300 ${
+                      isActive('Profile') ? 'text-emerald-600' : 'text-gray-400'
+                    }`}
+                  >
+                    PROFILE
+                  </span>
+                  {isActive('Profile') && (
+                    <div
+                      className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400"
+                      style={{
+                        boxShadow: '0 0 10px rgba(52, 211, 153, 0.5)',
+                      }}
+                    />
+                  )}
+                </Link>
+              </div>
+            </nav>
+          </div>
+        ) : (
+          <div
+            className="min-h-screen bg-gray-50"
+            data-portal="host"
+            data-user-type={currentUser?.user_type}
+            data-route={location.pathname}
+          >
+            <main className="safe-bottom">{children}</main>
+
+            <FloatingAIEventsButton className="z-[99]" />
+            <FloatingReelsButton className="z-[99]" />
+            <BabyBlinkFloating />
+
+            {/* HOST BOTTOM NAVIGATION */}
+            <nav
+              className="bottom-nav bg-white/80 backdrop-blur-xl border-t border-gray-100 shadow-sm"
+              data-portal-nav="host"
+            >
+              <div className="flex justify-around items-center h-14 max-w-md mx-auto px-1">
+                <Link
+                  to={createPageUrl('Home')}
+                  className={`flex flex-col items-center justify-center gap-0.5 px-3 py-2 transition-all ${
+                    isActive('Home') ? 'text-emerald-500' : 'text-gray-400'
+                  }`}
+                >
+                  <Home className="w-4 h-4" strokeWidth={1.5} />
+                  <span className="text-[9px] font-medium tracking-tight">
+                    Home
+                  </span>
+                </Link>
+
+                <Link
+                  to={createPageUrl('MyEvents')}
+                  className={`flex flex-col items-center justify-center gap-0.5 px-3 py-2 transition-all ${
+                    isActive('MyEvents') ? 'text-emerald-500' : 'text-gray-400'
+                  }`}
+                >
+                  <Calendar className="w-4 h-4" strokeWidth={1.5} />
+                  <span className="text-[9px] font-medium tracking-tight">
+                    My Events
+                  </span>
+                </Link>
+
+                <Link
+                  to={createPageUrl('Blink')}
+                  className="flex flex-col items-center justify-center gap-0.5 px-2 py-2 transition-all relative -mt-6"
+                >
+                  <div
+                    className="relative rounded-full transition-all duration-300 hover:shadow-md"
+                    style={{
+                      width: '46px',
+                      height: '54px',
+                      borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%',
+                      border: '2px solid rgba(52, 211, 153, 0.3)',
+                      background: isActive('Blink')
+                        ? 'linear-gradient(135deg, rgba(52, 211, 153, 0.08), rgba(6, 182, 212, 0.08))'
+                        : 'linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02))',
+                      backdropFilter: 'blur(20px)',
+                      WebkitBackdropFilter: 'blur(20px)',
+                      boxShadow: isActive('Blink')
+                        ? '0 8px 32px rgba(52, 211, 153, 0.15), inset 0 1px 2px rgba(255, 255, 255, 0.3)'
+                        : '0 4px 16px rgba(0, 0, 0, 0.05), inset 0 1px 2px rgba(255, 255, 255, 0.3)',
+                    }}
+                  >
+                    <div
+                      className="absolute inset-0 rounded-full opacity-50"
+                      style={{
+                        background:
+                          'linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 50%, rgba(255, 255, 255, 0.2) 100%)',
+                      }}
+                    />
+                    <div className="relative w-full h-full flex items-center justify-center animate-float-subtle">
+                      <BlinkLogo
+                        size="xl"
+                        className={`transition-all duration-300 ${
+                          isActive('Blink')
+                            ? 'scale-110'
+                            : 'scale-105 hover:scale-115'
+                        }`}
+                        style={{
+                          width: '50%',
+                          height: '50%',
+                          objectFit: 'contain',
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <span
+                    className={`text-[9px] font-medium tracking-tight mt-1 ${
+                      isActive('Blink') ? 'text-emerald-500' : 'text-gray-400'
+                    }`}
+                  >
+                    Blink
+                  </span>
+                </Link>
+
+                <Link
+                  to={
+                    hasAccessedBrain
+                      ? createPageUrl('HostBrain')
+                      : createPageUrl('BrainOrientation')
+                  }
+                  className={`flex flex-col items-center justify-center gap-0.5 px-3 py-2 transition-all ${
+                    isActive('HostBrain') || isActive('BrainOrientation')
+                      ? 'text-emerald-500'
+                      : 'text-gray-400'
+                  }`}
+                >
+                  <Brain className="w-4 h-4" strokeWidth={1.5} />
+                  <span className="text-[9px] font-medium tracking-tight">
+                    Think
+                  </span>
+                </Link>
+
+                <Link
+                  to={createPageUrl('Profile')}
+                  className={`flex flex-col items-center justify-center gap-0.5 px-3 py-2 transition-all ${
+                    isActive('Profile') ? 'text-emerald-500' : 'text-gray-400'
+                  }`}
+                >
+                  <User className="w-4 h-4" strokeWidth={1.5} />
+                  <span className="text-[9px] font-medium tracking-tight">
+                    Profile
+                  </span>
+                </Link>
+              </div>
+            </nav>
+          </div>
+        )}
+      </ProfileSetupGuard>
+    </ErrorBoundary>
+  );
+}
