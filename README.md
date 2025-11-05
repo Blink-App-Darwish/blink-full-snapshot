@@ -17,4 +17,4 @@ npm run dev
 npm run build
 ```
 
-For more information and support, please contact Mohamed Darwish darwishfin@gmailc.com
+For more information and support, please contact Mohamed Darwish darwishfin@gmail.com
